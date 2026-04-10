@@ -94,6 +94,29 @@ docker run -d \
 
 See `docker-compose.yaml` in this repo for a compose example.
 
+### Synology DSM 7 (Container Manager)
+
+Use `docker-compose.synology.yaml` (no `/etc/timezone` mounts; `./db` volume for SQLite).
+
+**Build the image** (on any Mac/PC/Linux with Docker Desktop or Engine):
+
+```bash
+cd rustdesk-api-server
+docker build -t rustdesk-api-server:local .
+```
+
+**Save and copy to the NAS** (optional; avoids building on the NAS):
+
+```bash
+docker save rustdesk-api-server:local -o rustdesk-api-server-local.tar
+```
+
+On DSM: **Container Manager → Image → Add → Add from file** → select the `.tar`. Then create a project from a compose file that uses `image: rustdesk-api-server:local` and **remove** the `build:` section from `docker-compose.synology.yaml`.
+
+**Or build on the NAS:** copy the **entire** repository folder to a share (e.g. `docker/rustdesk-api-server/`), edit `CSRF_TRUSTED_ORIGINS` in `docker-compose.synology.yaml`, ensure a `db` subfolder exists next to the compose file, then in Container Manager use **Create → Project** and point it at that folder.
+
+Open `http://<NAS-IP>:21114`. If you use Synology **reverse proxy with HTTPS**, set `CSRF_TRUSTED_ORIGINS` to your public `https://...` URL.
+
 ## Environment Variables
 
 | Variable Name | Reference Value | Note |

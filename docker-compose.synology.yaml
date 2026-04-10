@@ -1,0 +1,36 @@
+# DSM 7 — Container Manager (Docker Compose)
+# 1. Create a folder on the NAS, e.g. /volume1/docker/rustdesk-api-server/
+# 2. Put this file there (and the full project if you use build: below).
+# 3. Create /volume1/docker/rustdesk-api-server/db/ (empty is fine; DB file is created on first run).
+# 4. Edit CSRF_TRUSTED_ORIGINS and ID_SERVER for your network.
+#
+# Option A — use a locally built image (see README “Build image”):
+#   docker compose -f docker-compose.synology.yaml up -d
+#   with `image:` set to your tag, and comment out `build:`.
+#
+# Option B — build on the NAS: copy the whole repo here, keep `build:` as below.
+#
+# Option C — upstream image only (no local build): delete `build:` and `dockerfile:` and set:
+#   image: ghcr.io/kingmo888/rustdesk-api-server:latest
+
+services:
+  rustdesk-api-server:
+    container_name: rustdesk-api-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rustdesk-api-server:local
+    restart: unless-stopped
+    ports:
+      - "21114:21114"
+    environment:
+      - HOST=0.0.0.0
+      - TZ=UTC
+      # Use your browser URL (scheme + host + port). Required behind HTTPS reverse proxy.
+      - CSRF_TRUSTED_ORIGINS=http://192.168.1.100:21114
+      # RustDesk ID / relay hostname for the embedded web client (optional)
+      - ID_SERVER=
+      - DEBUG=False
+    volumes:
+      # Persist SQLite database on the NAS
+      - ./db:/rustdesk-api-server/db
