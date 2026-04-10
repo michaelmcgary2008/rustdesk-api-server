@@ -4,7 +4,7 @@
 
 ## Please use the latest version 1.2.3 of the client.
 
-[点击这里查看中文说明。](https://github.com/kingmo888/rustdesk-api-server/blob/master/README.md)
+[Legacy Chinese README (upstream)](https://github.com/kingmo888/rustdesk-api-server/blob/master/README.md)
 
 <p align="center">
     <i>A Rustdesk API interface implemented in Python, with WebUI management support</i>
@@ -47,7 +47,7 @@ Admin Home Page:
 
 ### Method 1: Out-of-the-box
 
-Only supports Windows, please go to the release to download, no need to install environment, just run `启动.bat` directly. Screenshots:
+Only supports Windows: download from Releases and run the bundled launcher (`start.bat` in the release package). Screenshot:
 
 ![Windows Run Directly Version](/images/windows_run.png)
 

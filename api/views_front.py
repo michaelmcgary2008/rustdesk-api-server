@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.db.models import Q
 from django.contrib.auth.decorators import login_required
 from django.contrib import auth
-from api.models import RustDeskPeer, RustDesDevice, UserProfile, ShareLink, ConnLog, FileLog
+from api.models import RustDeskPeer, RustDesDevice, UserProfile, ShareLink, ConnLog, FileLog, MachineGroup
 from django.forms.models import model_to_dict
 from django.core.paginator import Paginator
 from django.http import HttpResponse
@@ -41,68 +41,55 @@ def getStrMd5(s):
 
 def model_to_dict2(instance, fields=None, exclude=None, replace=None, default=None):
     """
-    :params instance: 模型对象，不能是queryset数据集
-    :params fields: 指定要展示的字段数据，('字段1','字段2')
-    :params exclude: 指定排除掉的字段数据,('字段1','字段2')
-    :params replace: 将字段名字修改成需要的名字，{'数据库字段名':'前端展示名'}
-    :params default: 新增不存在的字段数据，{'字段':'数据'}
+    :param instance: Model instance (not a queryset).
+    :param fields: Optional tuple of field names to include.
+    :param exclude: Optional tuple of field names to exclude.
+    :param replace: Map database field names to display names.
+    :param default: Extra key/value pairs to add.
     """
-    # 对传递进来的模型对象校验
     if not isinstance(instance, Model):
-        raise Exception(_('model_to_dict接收的参数必须是模型对象'))
-    # 对替换数据库字段名字校验
+        raise Exception(_('model_to_dict2 expects a model instance'))
     if replace and type(replace) == dict:   # noqa
         for replace_field in replace.values():
             if hasattr(instance, replace_field):
-                raise Exception(_(f'model_to_dict,要替换成{replace_field}字段已经存在了'))
-    # 对要新增的默认值进行校验
+                raise Exception(_(f'model_to_dict2: target name {replace_field} already exists'))
     if default and type(default) == dict:   # noqa
         for default_key in default.keys():
             if hasattr(instance, default_key):
-                raise Exception(_(f'model_to_dict,要新增默认值，但字段{default_key}已经存在了'))  # noqa
+                raise Exception(_(f'model_to_dict2: default key {default_key} already exists'))  # noqa
     opts = instance._meta
     data = {}
     for f in chain(opts.concrete_fields, opts.private_fields, opts.many_to_many):
-        # 源码下：这块代码会将时间字段剔除掉，我加上一层判断，让其不再剔除时间字段
         if not getattr(f, 'editable', False):
             if type(f) == DateField or type(f) == DateTimeField:   # noqa
                 pass
             else:
                 continue
-        # 如果fields参数传递了，要进行判断
         if fields is not None and f.name not in fields:
             continue
-        # 如果exclude 传递了，要进行判断
         if exclude and f.name in exclude:
             continue
 
         key = f.name
-        # 获取字段对应的数据
         if type(f) == DateTimeField:   # noqa
-            # 字段类型是，DateTimeFiled 使用自己的方式操作
             value = getattr(instance, key)
             value = datetime.datetime.strftime(value, '%Y-%m-%d %H:%M')
         elif type(f) == DateField:   # noqa
-            # 字段类型是，DateFiled 使用自己的方式操作
             value = getattr(instance, key)
             value = datetime.datetime.strftime(value, '%Y-%m-%d')
         elif type(f) == CharField or type(f) == TextField:   # noqa
-            # 字符串数据是否可以进行序列化，转成python结构数据
             value = getattr(instance, key)
             try:
                 value = json.loads(value)
             except Exception as _:  # noqa
                 value = value
-        else:  # 其他类型的字段
-            # value = getattr(instance, key)
+        else:
             key = f.name
             value = f.value_from_object(instance)
             # data[f.name] = f.value_from_object(instance)
-        # 1、替换字段名字
         if replace and key in replace.keys():
             key = replace.get(key)
         data[key] = value
-    # 2、新增默认的字段数据
     if default:
         data.update(default)
     return data
@@ -134,14 +121,14 @@ def user_login(request):
     username = request.POST.get('account', '')
     password = request.POST.get('password', '')
     if not username or not password:
-        return JsonResponse({'code': 0, 'msg': _('出了点问题，未获取用户名或密码。')})
+        return JsonResponse({'code': 0, 'msg': _('Missing username or password.')})
 
     user = auth.authenticate(username=username, password=password)
     if user:
         auth.login(request, user)
         return JsonResponse({'code': 1, 'url': '/api/work'})
     else:
-        return JsonResponse({'code': 0, 'msg': _('帐号或密码错误！')})
+        return JsonResponse({'code': 0, 'msg': _('Invalid username or password.')})
 
 
 def user_register(request):
@@ -154,25 +141,25 @@ def user_register(request):
         'msg': ''
     }
     if not ALLOW_REGISTRATION:
-        result['msg'] = _('当前未开放注册，请联系管理员！')
+        result['msg'] = _('Registration is disabled. Contact an administrator.')
         return JsonResponse(result)
 
     username = request.POST.get('user', '')
     password1 = request.POST.get('pwd', '')
 
     if len(username) <= 3:
-        info = _('用户名不得小于3位')
+        info = _('Username must be longer than 3 characters.')
         result['msg'] = info
         return JsonResponse(result)
 
     if len(password1) < 8 or len(password1) > 20:
-        info = _('密码长度不符合要求, 应在8~20位。')
+        info = _('Password must be between 8 and 20 characters.')
         result['msg'] = info
         return JsonResponse(result)
 
     user = UserProfile.objects.filter(Q(username=username)).first()
     if user:
-        info = _('用户名已存在。')
+        info = _('Username already exists.')
         result['msg'] = info
         return JsonResponse(result)
     user = UserProfile(
@@ -195,10 +182,19 @@ def user_logout(request):
     return HttpResponseRedirect('/api/user_action?action=login')
 
 
+def _truncate_field(s, n):
+    s = s or ''
+    return s if len(s) <= n else s[: max(0, n - 1)] + '…'
+
+
 def get_single_info(uid):
-    peers = RustDeskPeer.objects.filter(Q(uid=uid))
-    rids = [x.rid for x in peers]
-    peers = {x.rid: model_to_dict(x) for x in peers}
+    peer_objs = RustDeskPeer.objects.filter(Q(uid=uid)).select_related('machine_group')
+    rids = [x.rid for x in peer_objs]
+    peers = {}
+    for x in peer_objs:
+        d = model_to_dict(x)
+        d['group_name'] = x.machine_group.name if x.machine_group else ''
+        peers[x.rid] = d
     # print(peers)
     devices = RustDesDevice.objects.filter(rid__in=rids)
     devices = {x.rid: x for x in devices}
@@ -210,30 +206,65 @@ def get_single_info(uid):
         peers[rid]['memory'] = device.memory
         peers[rid]['cpu'] = device.cpu
         peers[rid]['os'] = device.os
-        peers[rid]['status'] = _('在线') if (now - device.update_time).seconds <= 120 else _('离线')
+        peers[rid]['ip_address'] = device.ip_address or ''
+        peers[rid]['is_online'] = (now - device.update_time).total_seconds() <= 120
+        peers[rid]['status'] = _('Online') if peers[rid]['is_online'] else _('Offline')
+
+    for rid, p in peers.items():
+        if rid not in devices:
+            p['is_online'] = False
+            p['status'] = _('Offline')
+            p.setdefault('update_time', '—')
+            p.setdefault('create_time', '')
+            p.setdefault('version', '')
+            p.setdefault('memory', '')
+            p.setdefault('cpu', '')
+            p.setdefault('os', '')
+            p.setdefault('ip_address', '')
 
     for rid in peers.keys():
-        peers[rid]['has_rhash'] = _('是') if len(peers[rid]['rhash']) > 1 else _('否')
+        peers[rid]['has_rhash'] = _('Yes') if len(peers[rid]['rhash']) > 1 else _('No')
 
     return [v for k, v in peers.items()]
 
 
 def get_all_info():
-    devices = RustDesDevice.objects.all()
-    peers = RustDeskPeer.objects.all()
-    devices = {x.rid: model_to_dict2(x) for x in devices}
+    devices_qs = RustDesDevice.objects.all()
+    devices = {x.rid: model_to_dict2(x) for x in devices_qs}
+    peer_list = RustDeskPeer.objects.select_related('machine_group').all()
+    user_ids = []
+    for p in peer_list:
+        try:
+            user_ids.append(int(p.uid))
+        except (TypeError, ValueError):
+            continue
+    users_map = {str(u.id): u.username for u in UserProfile.objects.filter(id__in=user_ids)}
     now = datetime.datetime.now()
-    for peer in peers:
-        user = UserProfile.objects.filter(Q(id=peer.uid)).first()
-        device = devices.get(peer.rid, None)
-        if device:
-            devices[peer.rid]['rust_user'] = user.username
-
-    for rid in devices.keys():
-        if not devices[rid].get('rust_user', ''):
-            devices[rid]['rust_user'] = _('未登录')
-    for k, v in devices.items():
-        devices[k]['status'] = _('在线') if (now - datetime.datetime.strptime(v['update_time'], '%Y-%m-%d %H:%M')).seconds <= 120 else _('离线')
+    rid_info = {}
+    for p in peer_list:
+        uname = users_map.get(str(p.uid), _('Not logged in'))
+        gname = p.machine_group.name if p.machine_group_id else ''
+        if p.rid not in rid_info:
+            rid_info[p.rid] = {'users': [], 'groups': set()}
+        if uname not in rid_info[p.rid]['users']:
+            rid_info[p.rid]['users'].append(uname)
+        if gname:
+            rid_info[p.rid]['groups'].add(gname)
+    for rid, v in devices.items():
+        info = rid_info.get(rid)
+        if info:
+            v['rust_user'] = ', '.join(info['users'])
+            v['group_name'] = ', '.join(sorted(info['groups'])) if info['groups'] else ''
+        else:
+            v['rust_user'] = _('Not logged in')
+            v['group_name'] = ''
+        try:
+            dt = datetime.datetime.strptime(v['update_time'], '%Y-%m-%d %H:%M')
+            v['is_online'] = (now - dt).total_seconds() <= 120
+            v['status'] = _('Online') if v['is_online'] else _('Offline')
+        except Exception:  # noqa
+            v['is_online'] = False
+            v['status'] = _('Offline')
     return [v for k, v in devices.items()]
 
 
@@ -244,7 +275,7 @@ def work(request):
 
     show_type = request.GET.get('show_type', '')
     show_all = True if show_type == 'admin' and u.is_admin else False
-    paginator = Paginator(get_all_info(), 15) if show_type == 'admin' and u.is_admin else Paginator(get_single_info(u.id), 15)
+    paginator = Paginator(get_all_info(), 24) if show_type == 'admin' and u.is_admin else Paginator(get_single_info(u.id), 24)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     return render(request, 'show_work.html', {'u': u, 'show_all': show_all, 'page_obj': page_obj})
@@ -261,13 +292,12 @@ def down_peers(request):
 
     all_info = get_all_info()
     f = xlwt.Workbook(encoding='utf-8')
-    sheet1 = f.add_sheet(_(u'设备信息表'), cell_overwrite_ok=True)
+    sheet1 = f.add_sheet(_('Device export'), cell_overwrite_ok=True)
     all_fields = [x.name for x in RustDesDevice._meta.get_fields()]
     all_fields.append('rust_user')
     for i, one in enumerate(all_info):
         for j, name in enumerate(all_fields):
             if i == 0:
-                # 写入列名
                 sheet1.write(i, j, name)
             sheet1.write(i + 1, j, one.get(name, '-'))
 
@@ -297,8 +327,7 @@ def share(request):
     peers = RustDeskPeer.objects.filter(Q(uid=request.user.id))
     sharelinks = ShareLink.objects.filter(Q(uid=request.user.id) & Q(is_used=False) & Q(is_expired=False))
 
-    # 省资源：处理已过期请求，不主动定时任务轮询请求，在任意地方请求时，检查是否过期，过期则保存。
-    # now = datetime.datetime.now()
+    # Expire share links lazily on access (no background job).
     for sl in sharelinks:
         check_sharelink_expired(sl)
     sharelinks = ShareLink.objects.filter(Q(uid=request.user.id) & Q(is_used=False) & Q(is_expired=False))
@@ -313,54 +342,49 @@ def share(request):
             shash = url.split('/')[-1]
             sharelink = ShareLink.objects.filter(Q(shash=shash))
             msg = ''
-            title = '成功'
+            title = _('Success')
             if not sharelink:
-                title = '错误'
-                msg = f'链接{url}:<br>分享链接不存在或已失效。'
+                title = _('Error')
+                msg = _('Link %(url)s: share link missing or expired.') % {'url': url}
             else:
                 sharelink = sharelink[0]
                 if str(request.user.id) == str(sharelink.uid):
-                    title = '错误'
-                    msg = f'链接{url}:<br><br>咱就说，你不能把链接分享给自己吧？！'
+                    title = _('Error')
+                    msg = _('Link %(url)s: you cannot redeem your own share link.') % {'url': url}
                 else:
                     sharelink.is_used = True
                     sharelink.save()
                     peers = sharelink.peers
                     peers = peers.split(',')
-                    # 自己的peers若重叠，需要跳过
                     peers_self_ids = [x.rid for x in RustDeskPeer.objects.filter(Q(uid=request.user.id))]
                     peers_share = RustDeskPeer.objects.filter(Q(rid__in=peers) & Q(uid=sharelink.uid))
-                    # peers_share_ids = [x.rid for x in peers_share]
 
                     for peer in peers_share:
                         if peer.rid in peers_self_ids:
                             continue
-                        # peer = RustDeskPeer.objects.get(rid=peer.rid)
                         peer_f = RustDeskPeer.objects.filter(Q(rid=peer.rid) & Q(uid=sharelink.uid))
                         if not peer_f:
-                            msg += f"{peer.rid}已存在,"
+                            msg += _('%(rid)s already exists, ') % {'rid': peer.rid}
                             continue
 
                         if len(peer_f) > 1:
-                            msg += f'{peer.rid}存在多个,已经跳过。 '
+                            msg += _('%(rid)s: multiple rows skipped. ') % {'rid': peer.rid}
                             continue
                         peer = peer_f[0]
                         peer.id = None
                         peer.uid = request.user.id
                         peer.save()
-                        msg += f"{peer.rid},"
+                        msg += f'{peer.rid},'
 
-                    msg += '已被成功获取。'
+                    msg += _(' Retrieved successfully.')
 
-            title = _(title)
-            msg = _(msg)
-            return render(request, 'msg.html', {'title': msg, 'msg': msg})
+            return render(request, 'msg.html', {'title': title, 'msg': msg})
     else:
         data = request.POST.get('data', '[]')
 
         data = json.loads(data)
         if not data:
-            return JsonResponse({'code': 0, 'msg': _('数据为空。')})
+            return JsonResponse({'code': 0, 'msg': _('No data.')})
         rustdesk_ids = [x['title'].split('|')[0] for x in data]
         rustdesk_ids = ','.join(rustdesk_ids)
         sharelink = ShareLink(
@@ -432,6 +456,116 @@ def get_file_log():
         new_ordered_dict[key] = alog
 
     return [v for k, v in new_ordered_dict.items()]
+
+
+def _inventory_for_admin():
+    """All discovered devices with assignment summary for the management UI."""
+    rows = get_all_info()
+    for row in rows:
+        row['rid'] = row.get('rid', '')
+    rows.sort(key=lambda x: x.get('update_time') or '', reverse=True)
+    return rows
+
+
+@login_required(login_url='/api/user_action?action=login')
+def manage_devices(request):
+    if not request.user.is_admin:
+        return HttpResponseRedirect('/api/work')
+    u = UserProfile.objects.get(username=request.user.username)
+    users = [{'id': x.id, 'username': x.username} for x in UserProfile.objects.all().order_by('username')]
+    groups = [
+        {'id': x.id, 'name': x.name, 'user_id': x.user_id}
+        for x in MachineGroup.objects.select_related('user').all().order_by('user_id', 'name')
+    ]
+    devices = _inventory_for_admin()
+    return render(
+        request,
+        'manage_devices.html',
+        {
+            'u': u,
+            'users': users,
+            'groups': groups,
+            'devices': devices,
+            'groups_json': json.dumps(groups),
+        },
+    )
+
+
+@login_required(login_url='/api/user_action?action=login')
+def assign_peers(request):
+    if request.method != 'POST' or not request.user.is_admin:
+        return JsonResponse({'code': 0, 'msg': _('Forbidden or invalid method.')})
+    try:
+        data = json.loads(request.body.decode())
+    except Exception:  # noqa
+        return JsonResponse({'code': 0, 'msg': _('Invalid JSON.')})
+    action = data.get('action', 'assign')
+    rids = data.get('rids') or []
+    target_uid = data.get('user_id')
+    group_id = data.get('group_id')
+    new_group_name = (data.get('new_group_name') or '').strip()
+
+    if not rids:
+        return JsonResponse({'code': 0, 'msg': _('Select at least one device.')})
+    if target_uid is None or str(target_uid) == '':
+        return JsonResponse({'code': 0, 'msg': _('Select a target user.')})
+
+    target = UserProfile.objects.filter(id=target_uid).first()
+    if not target:
+        return JsonResponse({'code': 0, 'msg': _('User does not exist.')})
+
+    if action == 'unassign':
+        RustDeskPeer.objects.filter(rid__in=rids, uid=str(target.id)).delete()
+        return JsonResponse({'code': 1, 'msg': _('Unassigned.')})
+
+    mg = None
+    if new_group_name:
+        mg, _ = MachineGroup.objects.get_or_create(user=target, name=new_group_name)
+    elif group_id:
+        mg = MachineGroup.objects.filter(id=group_id, user_id=target.id).first()
+        if not mg:
+            return JsonResponse({'code': 0, 'msg': _('Group missing or not owned by this user.')})
+
+    if action == 'exclusive_assign':
+        RustDeskPeer.objects.filter(rid__in=rids).delete()
+
+    for rid in rids:
+        dev = RustDesDevice.objects.filter(rid=rid).first()
+        if not dev:
+            continue
+        uname = _truncate_field(dev.username, 20) or '-'
+        host = _truncate_field(dev.hostname, 30) or '-'
+        peer = RustDeskPeer.objects.filter(uid=str(target.id), rid=rid).first()
+        if peer:
+            peer.username = uname
+            peer.hostname = host
+            peer.alias = _truncate_field(dev.hostname, 30) or rid[:12]
+            peer.machine_group = mg
+            peer.save()
+        else:
+            RustDeskPeer.objects.create(
+                uid=str(target.id),
+                rid=rid,
+                username=uname,
+                hostname=host,
+                alias=_truncate_field(dev.hostname, 30) or rid[:12],
+                platform='',
+                tags='',
+                rhash='',
+                machine_group=mg,
+            )
+
+    return JsonResponse({'code': 1, 'msg': _('Saved.')})
+
+
+@login_required(login_url='/api/user_action?action=login')
+def device_inventory(request):
+    """JSON list of all discovered devices and assignments (admin session)."""
+    if request.method != 'GET':
+        return JsonResponse({'code': 0, 'msg': _('GET only.')})
+    if not request.user.is_admin:
+        return JsonResponse({'code': 0, 'msg': _('Forbidden.')}, status=403)
+    return JsonResponse({'code': 1, 'data': _inventory_for_admin()})
 
 
 @login_required(login_url='/api/user_action?action=login')

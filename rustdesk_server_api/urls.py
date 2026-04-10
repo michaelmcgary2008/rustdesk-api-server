@@ -23,7 +23,7 @@ if django.__version__.split('.')[0]>='4':
     from django.conf.urls import  include
 else:
     from django.conf.urls import  url, include
-from django.views import static ##新增
+from django.views import static
 from django.conf import settings
 
 

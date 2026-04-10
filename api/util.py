@@ -20,7 +20,7 @@ def settings(request):
     try:
         username = request.user
         u = UserProfile.objects.get(username=username)  
-        context['test'] = '这是一个测试变量'
+        context['test'] = 'test context variable'
         context['u'] = u
         #context['user'] = u
         context['username'] = username

@@ -1,65 +1,65 @@
-# 默认数据库(sqlite3)转Mysql数据库保姆级教程
+# Migrating from the default SQLite database to MySQL
 
-### 本教程尽量保持源码安装与docker安装的通用性。
+This guide applies to both source installs and Docker.
 
-1、源码安装（如果采用源码安装的跳过1、2步骤）
-```
-# 将代码克隆到本地
+### 1. Source install (skip if you already run from source)
+
+```bash
 git clone https://github.com/kingmo888/rustdesk-api-server.git
-# 进入目录
 cd rustdesk-api-server
-# 安装依赖
 pip install -r requirements.txt
 ```
 
-2、覆盖数据库
+### 2. Replace the database file
 
-全新安装时数据库为默认数据库，请将你正在使用的数据库覆盖到`/db/db.sqlite3`
+On a fresh install the app uses the default DB. Copy your live `db.sqlite3` to `/db/db.sqlite3` in the project.
 
-3、 从sqlite数据库备份数据
+### 3. Export data from SQLite
 
-执行命令：`python manage.py dumpdata > data.json`，将数据导出到根目录下的`data.json`中。
+From the project root:
 
-4、修改数据库配置
+```bash
+python manage.py dumpdata > data.json
+```
 
-假设新建的mysql空数据库的信息如下：
+### 4. Configure MySQL
 
-| 信息 | 值 |
-| ------- | ------- |
-| 数据库服务器IP | 192.168.1.33 |
-| 数据库名 | rustdesk_api |
-| 数据库用户名 | myuser |
-| 数据库密码 | 123456 |
-| 数据库端口 | 3099 |
+Example empty MySQL database:
 
+| Setting | Value |
+| ------- | ----- |
+| Host | 192.168.1.33 |
+| Database | rustdesk_api |
+| User | myuser |
+| Password | 123456 |
+| Port | 3099 |
 
-在文件`rustdesk_server_api/settings.py`中依次修改如下配置：
+In `rustdesk_server_api/settings.py` set:
 
-- (1) `DATABASE_TYPE = os.environ.get("DATABASE_TYPE", 'SQLITE')`改为`DATABASE_TYPE = os.environ.get("DATABASE_TYPE", 'MYSQL')`
-- (2) `MYSQL_HOST = os.environ.get("MYSQL_HOST", '127.0.0.1')`改为`MYSQL_HOST = os.environ.get("MYSQL_HOST", '192.168.1.33')`
-- (3) `MYSQL_DBNAME = os.environ.get("MYSQL_DBNAME", '-')`改为`MYSQL_DBNAME = os.environ.get("MYSQL_DBNAME", 'rustdesk_api')`
-- (4) `MYSQL_USER = os.environ.get("MYSQL_USER", '-')`改为`MYSQL_USER = os.environ.get("MYSQL_USER", 'myuser')`
-- (5) `MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", '-')`改为`MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", '123456')`
-- (6) `MYSQL_PORT = os.environ.get("MYSQL_PORT", '3306')`改为`MYSQL_PORT = os.environ.get("MYSQL_PORT", '3099')`
+- `DATABASE_TYPE` → `'MYSQL'`
+- `MYSQL_HOST` → e.g. `'192.168.1.33'`
+- `MYSQL_DBNAME` → `'rustdesk_api'`
+- `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_PORT` as needed
 
-5、使用命令在mysql中创建表
+### 5. Create tables in MySQL
 
-`python manage.py makemigrations`
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
 
-`python manage.py migrate`
+If `django_content_type` and `auth_permission` already contain rows, truncate them before import (otherwise you may get duplicate key errors).
 
-通过mysql数据库管理工具查看数据库表：`django_content_type`, `auth_permission`，如果存在数据，需要将这两个标清空，否则导入备份数据时会出错（提示重复导入数据）。
+### 6. Load the dump
 
-6、将备份数据导入mysql
+```bash
+python manage.py loaddata data.json
+```
 
-执行`python manage.py loaddata data.json`
+If you get encoding errors, save `data.json` as UTF-8 and retry. Fix any invalid rows in the JSON and re-export from SQLite if needed.
 
-在加载数据的过程中，最有可能的报错是提示导出的数据文件data.json中编码不是utf-8，需要把data.json文件转为utf-8格式，然后在加载数据到mysql中。
+### 7. Docker
 
-还有可能会提示其他原数据有问题导致的报错，根据报错提示查看原数据的问题。修改之后再次从sqlite3导出数据，然后导入数据。
+If MySQL is already configured, set the MySQL-related environment variables and restart.
 
-
-7、docker使用
-
-如果mysql数据库已经配置好，则只需要将环境变量中mysql的部分按要求修改，重启即可。
-如果未配置mysql数据库，则将`步骤6`中已经配置好的mysql数据库导出，并在你需要的指定位置新建并还原，然后将环境变量中mysql的部分按要求修改，重启即可。
+If MySQL is new, create the database, import a dump if needed, set env vars, and restart the container.

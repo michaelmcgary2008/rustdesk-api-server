@@ -3,7 +3,7 @@ FROM python:3.10.3-alpine
 WORKDIR /rustdesk-api-server
 ADD . /rustdesk-api-server
 
-# 安装系统依赖
+# System dependencies for mysqlclient build
 RUN apk add --no-cache \
     gcc \
     musl-dev \

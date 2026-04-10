@@ -26,7 +26,7 @@ def get_client_ip(request):
 def login(request):
     result = {}
     if request.method == 'GET':
-        result['error'] = _('请求方式错误！请使用POST方式。')
+        result['error'] = _('Wrong method. Use POST.')
         return JsonResponse(result)
 
     data = json.loads(request.body.decode())
@@ -40,7 +40,7 @@ def login(request):
     deviceInfo = data.get('deviceInfo', '')
     user = auth.authenticate(username=username, password=password)
     if not user:
-        result['error'] = _('帐号或密码错误！请重试，多次重试后将被锁定IP！')
+        result['error'] = _('Invalid username or password. Too many attempts may lock your IP.')
         return JsonResponse(result)
     user.rid = rid
     user.uuid = uuid
@@ -48,7 +48,7 @@ def login(request):
     user.rtype = rtype
     user.deviceInfo = json.dumps(deviceInfo)
     user.save()
-    # 绑定设备  20240819
+    # Bind device (20240819)
     peer = RustDeskPeer.objects.filter(Q(rid=rid)).first()
     if not peer:
         device = RustDesDevice.objects.filter(Q(uuid=uuid)).first()
@@ -63,7 +63,7 @@ def login(request):
 
     token = RustDeskToken.objects.filter(Q(uid=user.id) & Q(username=user.username) & Q(rid=user.rid)).first()
 
-    # 检查是否过期
+    # Check token expiry
     if token:
         now_t = datetime.datetime.now()
         nums = (now_t - token.create_time).seconds if now_t > token.create_time else 0
@@ -72,7 +72,7 @@ def login(request):
             token = None
 
     if not token:
-        # 获取并保存token
+        # Create and store token
         token = RustDeskToken(
             username=user.username,
             uid=user.id,
@@ -90,7 +90,7 @@ def login(request):
 
 def logout(request):
     if request.method == 'GET':
-        result = {'error': _('请求方式错误！')}
+        result = {'error': _('Wrong method.')}
         return JsonResponse(result)
 
     data = json.loads(request.body.decode())
@@ -98,7 +98,7 @@ def logout(request):
     uuid = data.get('uuid', '')
     user = UserProfile.objects.filter(Q(rid=rid) & Q(uuid=uuid)).first()
     if not user:
-        result = {'error': _('异常请求！')}
+        result = {'error': _('Invalid request.')}
         return JsonResponse(result)
     token = RustDeskToken.objects.filter(Q(uid=user.id) & Q(rid=user.rid)).first()
     if token:
@@ -111,7 +111,7 @@ def logout(request):
 def currentUser(request):
     result = {}
     if request.method == 'GET':
-        result['error'] = _('错误的提交方式！')
+        result['error'] = _('Wrong submission method.')
         return JsonResponse(result)
     # postdata = json.loads(request.body)
     # rid = postdata.get('id', '')
@@ -139,7 +139,7 @@ def ab(request):
     access_token = access_token.split('Bearer ')[-1]
     token = RustDeskToken.objects.filter(Q(access_token=access_token)).first()
     if not token:
-        result = {'error': _('拉取列表错误！')}
+        result = {'error': _('Failed to load address book.')}
         return JsonResponse(result)
 
     if request.method == 'GET':
@@ -185,9 +185,7 @@ def ab(request):
         peers = data.get('peers', [])
 
         if tagnames:
-            # 删除旧的tag
             RustDeskTag.objects.filter(uid=token.uid).delete()
-            # 增加新的
             newlist = []
             for name in tagnames:
                 tag = RustDeskTag(
@@ -218,22 +216,22 @@ def ab(request):
 
     result = {
         'code': 102,
-        'data': _('更新地址簿有误')
+        'data': _('Address book update error')
     }
     return JsonResponse(result)
 
 
 def ab_get(request):
-    # 兼容 x86-sciter 版客户端，此版客户端通过访问 "POST /api/ab/get" 来获取地址簿
+    # x86-sciter client uses POST /api/ab/get for address book
     request.method = 'GET'
     return ab(request)
 
 
 def sysinfo(request):
-    # 客户端注册服务后，才会发送设备信息
+    # Clients send device info after the service is registered
     result = {}
     if request.method == 'GET':
-        result['error'] = _('错误的提交方式！')
+        result['error'] = _('Wrong submission method.')
         return JsonResponse(result)
     client_ip = get_client_ip(request)
     postdata = json.loads(request.body)
@@ -262,16 +260,34 @@ def sysinfo(request):
 
 def heartbeat(request):
     postdata = json.loads(request.body)
-    device = RustDesDevice.objects.filter(Q(rid=postdata['id']) & Q(uuid=postdata['uuid'])).first()
-    if device:
-        client_ip = get_client_ip(request)
-        device.ip_address = client_ip
-        device.save()
-    # token保活
+    rid = postdata.get('id', '')
+    uuid = postdata.get('uuid', '')
+    client_ip = get_client_ip(request)
+    # Autodiscover: register device on heartbeat if sysinfo has not run yet (client must call this API).
+    if rid and uuid:
+        device = RustDesDevice.objects.filter(Q(rid=rid) & Q(uuid=uuid)).first()
+        if not device:
+            device = RustDesDevice(
+                rid=rid,
+                uuid=uuid,
+                cpu='',
+                hostname='Pending',
+                memory='',
+                os='',
+                username='',
+                version='',
+                ip_address=client_ip,
+            )
+            device.save()
+        else:
+            device.ip_address = client_ip
+            device.save()
+    # Refresh token
     create_time = datetime.datetime.now() + datetime.timedelta(seconds=EFFECTIVE_SECONDS)
-    RustDeskToken.objects.filter(Q(rid=postdata['id']) & Q(uuid=postdata['uuid'])).update(create_time=create_time)
+    if rid and uuid:
+        RustDeskToken.objects.filter(Q(rid=rid) & Q(uuid=uuid)).update(create_time=create_time)
     result = {}
-    result['data'] = _('在线')
+    result['data'] = _('Online')
     return JsonResponse(result)
 
 
@@ -335,7 +351,7 @@ def convert_filesize(size_bytes):
 def users(request):
     result = {
         'code': 1,
-        'data': _('好的')
+        'data': _('OK')
     }
     return JsonResponse(result)
 

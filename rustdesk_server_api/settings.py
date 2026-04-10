@@ -24,29 +24,28 @@ else:
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("SECRET_KEY", 'j%7yjvygpih=6b%qf!q%&ixpn+27dngzdu-i3xh-^3xgy3^nnc')
-# ID服务器IP或域名，一般与中继服务器，用于web client
+# ID server host (often same as relay); used by the web client
 ID_SERVER = os.environ.get("ID_SERVER", '')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", False)
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 ALLOWED_HOSTS = ["*"]
-AUTH_USER_MODEL = 'api.UserProfile'      # AppName.自定义user
+AUTH_USER_MODEL = 'api.UserProfile'
 
-ALLOW_REGISTRATION = os.environ.get("ALLOW_REGISTRATION", "True")          # 是否允许注册, True为允许，False为不允许
+ALLOW_REGISTRATION = os.environ.get("ALLOW_REGISTRATION", "True")
 ALLOW_REGISTRATION = True if ALLOW_REGISTRATION.lower() == 'true' else False
 
 
-# ==========数据库配置 开始=====================
+# ========== Database (MySQL optional) ==========
 DATABASE_TYPE = os.environ.get("DATABASE_TYPE", 'SQLITE')
 MYSQL_DBNAME = os.environ.get("MYSQL_DBNAME", '-')
 MYSQL_HOST = os.environ.get("MYSQL_HOST", '127.0.0.1')
 MYSQL_USER = os.environ.get("MYSQL_USER", '-')
 MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", '-')
 MYSQL_PORT = os.environ.get("MYSQL_PORT", '3306')
-# ==========数据库配置 结束=====================
+# ========== End database ==========
 
-LANGUAGE_CODE = os.environ.get("LANGUAGE_CODE", 'zh-hans')
-# #LANGUAGE_CODE = os.environ.get("LANGUAGE_CODE", 'en')
+LANGUAGE_CODE = os.environ.get("LANGUAGE_CODE", 'en')
 
 # Application definition
 
@@ -66,7 +65,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',   # 取消post的验证。
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # CSRF disabled for legacy API POST
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -105,15 +104,14 @@ DATABASES = {
     }
 }
 if DATABASE_TYPE == 'MYSQL' and MYSQL_DBNAME != '-' and MYSQL_USER != '-' and MYSQL_PASSWORD != '-':
-    # 简单通过数据库名、账密信息过滤下，防止用户未配置mysql却使用mysql
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': MYSQL_DBNAME,               # 数据库名
-            'HOST': MYSQL_HOST,                 # 数据库服务器IP
-            'USER': MYSQL_USER,                 # 数据库用户名
-            'PASSWORD': MYSQL_PASSWORD,         # 数据库密码
-            'PORT': MYSQL_PORT,                 # 端口
+            'NAME': MYSQL_DBNAME,
+            'HOST': MYSQL_HOST,
+            'USER': MYSQL_USER,
+            'PASSWORD': MYSQL_PASSWORD,
+            'PORT': MYSQL_PORT,
             'OPTIONS': {'charset': 'utf8'},
         }
     }
@@ -161,12 +159,11 @@ if DEBUG:
     STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 else:
-    STATIC_ROOT = os.path.join(BASE_DIR, 'static')     # 新增
+    STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 LANGUAGES = (
-    ('zh-hans', '中文简体'),
     ('en', 'English'),
-
+    ('zh-hans', 'Chinese (Simplified)'),
 )
 
 LOCALE_PATHS = (

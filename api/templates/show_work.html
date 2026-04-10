@@ -1,72 +1,66 @@
 {% extends "base.html" %}
 {% load my_filters %}
 {% block title %}RustDesk WebUI{% endblock %}
-{% block legend_name %}{{ "综合屏" | translate }}{% endblock %}
+{% block legend_name %}{{ "Dashboard" | translate }}{% endblock %}
+{% block link %}
+<style>
+  .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; padding: 8px 0 24px; }
+  .device-tile {
+    background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    border: 1px solid #e6e6e6; border-left-width: 4px;
+  }
+  .device-tile.online { border-left-color: #16b777; }
+  .device-tile.offline { border-left-color: #c2c2c2; }
+  .tile-title { font-weight: 600; font-size: 15px; margin: 0 0 6px; color: #333; word-break: break-all; }
+  .tile-rid { font-size: 12px; color: #888; font-family: ui-monospace, monospace; margin-bottom: 8px; }
+  .tile-meta { font-size: 12px; color: #555; line-height: 1.55; }
+  .tile-meta span { display: block; }
+  .page-bar { padding: 8px 0 20px; text-align: center; }
+</style>
+{% endblock %}
 {% block content %}
 <div style="padding: 20px; background-color: #F2F2F2;">
   <div class="layui-row layui-col-space15">
     {% if not show_all %}
     <div class="layui-col-md15">
       <div class="layui-card">
-        <div class="layui-card-header">{{ "设备统计" | translate }} - 【{{ "用户名" | translate }}:{{u.username}}】</div>
+        <div class="layui-card-header">{{ "Device statistics" | translate }} — {{ "Username" | translate }}: {{ u.username }}</div>
         <div class="layui-card-body">
-          <table class="layui-table">
-            <thead>
-              <tr>
-                <th>{{ "客户端ID" | translate }}</th>
-                <th>{{ "版本" | translate }}</th>
-                <th>{{ "连接密码" | translate }}</th>
-                <th>{{ "系统用户名" | translate }}</th>
-                <th>{{ "计算机名" | translate }}</th>
-                <th>{{ "别名" | translate }}</th>
-                <th>{{ "平台" | translate }}</th>
-                <th>{{ "系统" | translate }}</th>
-                <th>{{ "CPU" | translate }}</th>
-                <th>{{ "内存" | translate }}</th>
-                <th>{{ "IP" | translate }}</th>
-                <th>{{ "注册时间" | translate }}</th>
-                <th>{{ "更新时间" | translate }}</th>
-                <th>{{ "状态" | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for one in page_obj %}
-              <tr>
-                <td>{{one.rid}} </td>
-                <td>{{one.version}}</td>
-                <td>{{one.has_rhash}}</td>
-                <td>{{one.username}}</td>
-                <td>{{one.hostname}}</td>
-                <td>{{one.alias}}</td>
-                <td>{{one.platform}}</td>
-                <td>{{one.os}}</td>
-                <td>{{one.cpu}}</td>
-                <td>{{one.memory}}</td>
-                <td>{{one.ip_address}}</td>
-                <td>{{one.create_time}}</td>
-                <td>{{one.update_time}}</td>
-                <td>{{one.status}} </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="tile-grid">
+            {% for one in page_obj %}
+            <div class="device-tile {% if one.is_online %}online{% else %}offline{% endif %}">
+              <div class="tile-title">{{ one.alias|default:one.hostname|default:one.rid }}</div>
+              <div class="tile-rid">{{ one.rid }}</div>
+              <div class="tile-meta">
+                <span><strong>{{ "Group" | translate }}:</strong> {{ one.group_name|default:"—" }}</span>
+                <span><strong>{{ "Version" | translate }}:</strong> {{ one.version|default:"—" }}</span>
+                <span><strong>{{ "Computer name" | translate }}:</strong> {{ one.hostname|default:"—" }}</span>
+                <span><strong>{{ "OS" | translate }}:</strong> {{ one.os|default:"—" }}</span>
+                <span><strong>{{ "Status" | translate }}:</strong> {{ one.status }}</span>
+                <span><strong>{{ "Updated" | translate }}:</strong> {{ one.update_time }}</span>
+              </div>
+            </div>
+            {% empty %}
+            <p>{{ "No devices yet" | translate }}</p>
+            {% endfor %}
+          </div>
         </div>
       </div>
     </div>
-    <div class="layui-col-md4 layui-col-md-offset4">
+    <div class="page-bar layui-col-md15">
       <span class="step-links">
           {% if page_obj.has_previous %}
-              <button class="layui-btn" ><a href="?page=1">&laquo; {{ "首页" | translate }}</a></button>
-              <button class="layui-btn" ><a href="?page={{ page_obj.previous_page_number }}">{{ "上一页" | translate }}</a></button>
+              <button class="layui-btn" ><a href="?page=1">&laquo; {{ "Home" | translate }}</a></button>
+              <button class="layui-btn" ><a href="?page={{ page_obj.previous_page_number }}">{{ "Previous page" | translate }}</a></button>
           {% endif %}
           {% if page_obj.paginator.num_pages > 1 %}
           <span class="current">
-              {{ "页码" | translate }} {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+              {{ "Page" | translate }} {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
           </span>
           {% endif %}
           {% if page_obj.has_next %}
-              <button class="layui-btn" > <a href="?page={{ page_obj.next_page_number }}">{{ "下一页" | translate }}</a></button>
-              <button class="layui-btn" ><a href="?page={{ page_obj.paginator.num_pages }}">{{ "尾页" | translate }} &raquo;</a></button>
+              <button class="layui-btn" > <a href="?page={{ page_obj.next_page_number }}">{{ "Next page" | translate }}</a></button>
+              <button class="layui-btn" ><a href="?page={{ page_obj.paginator.num_pages }}">{{ "Last page" | translate }} &raquo;</a></button>
           {% endif %}
       </span>
   </div>
@@ -76,64 +70,44 @@
     {% if u.is_admin and show_all %}
     <div class="layui-col-md15">
       <div class="layui-card">
-        <div class="layui-card-header">{{ "全部用户" | translate }} &raquo;
-          <div class="layui-btn" ><a href="/api/down_peers">{{ "导出xlsx" | translate }}</a></div>
+        <div class="layui-card-header">{{ "All users" | translate }} &raquo;
+          <div class="layui-btn" ><a href="/api/down_peers">{{ "Export XLS" | translate }}</a></div>
         </div>
         <div class="layui-card-body">
-          <table class="layui-table">
-            <thead>
-              <tr>
-                <th>{{ "客户端ID" | translate }}</th>
-                <th>{{ "所属用户" | translate }}</th>
-                <th>{{ "版本" | translate }}</th>
-                <th>{{ "系统用户名" | translate }}</th>
-                <th>{{ "计算机名" | translate }}</th>
-                <th>{{ "系统" | translate }}</th>
-                <th>{{ "CPU" | translate }}</th>
-                <th>{{ "内存" | translate }}</th>
-                <th>{{ "IP" | translate }}</th>
-                <th>{{ "注册日期" | translate }}</th>
-                <th>{{ "更新时间" | translate }}</th>
-                <th>{{ "状态" | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-
-              {% for one in page_obj %}
-              <tr>
-                <td>{{one.rid}} </td>
-                <td>{{one.rust_user}} </td>
-                <td>{{one.version}} </td>
-                <td>{{one.username}} </td>
-                <td>{{one.hostname}} </td>
-                <td>{{one.os}} </td>
-                <td>{{one.cpu}} </td>
-                <td>{{one.memory}} </td>
-                <td>{{one.ip_address}}</td>
-                <td>{{one.create_time}} </td>
-                <td>{{one.update_time}} </td>
-                <td>{{one.status}} </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="tile-grid">
+            {% for one in page_obj %}
+            <div class="device-tile {% if one.is_online %}online{% else %}offline{% endif %}">
+              <div class="tile-title">{{ one.hostname|default:one.rid }}</div>
+              <div class="tile-rid">{{ one.rid }}</div>
+              <div class="tile-meta">
+                <span><strong>{{ "Owner" | translate }}:</strong> {{ one.rust_user }}</span>
+                <span><strong>{{ "Group" | translate }}:</strong> {{ one.group_name|default:"—" }}</span>
+                <span><strong>{{ "OS" | translate }}:</strong> {{ one.os|default:"—" }}</span>
+                <span><strong>{{ "Status" | translate }}:</strong> {{ one.status }}</span>
+                <span><strong>{{ "Updated" | translate }}:</strong> {{ one.update_time }}</span>
+              </div>
+            </div>
+            {% empty %}
+            <p>{{ "No devices yet" | translate }}</p>
+            {% endfor %}
+          </div>
         </div>
       </div>
     </div>
-    <div class="layui-col-md4 layui-col-md-offset4">
+    <div class="page-bar layui-col-md15">
       <span class="step-links">
           {% if page_obj.has_previous %}
-              <button class="layui-btn" ><a href="?show_type=admin&page=1">&laquo; {{ "首页" | translate }}</a></button>
-              <button class="layui-btn" ><a href="?show_type=admin&page={{ page_obj.previous_page_number }}">{{ "上一页" | translate }}</a></button>
+              <button class="layui-btn" ><a href="?show_type=admin&page=1">&laquo; {{ "Home" | translate }}</a></button>
+              <button class="layui-btn" ><a href="?show_type=admin&page={{ page_obj.previous_page_number }}">{{ "Previous page" | translate }}</a></button>
           {% endif %}
           {% if page_obj.paginator.num_pages > 1 %}
           <span class="current">
-              {{ "页码" | translate }} {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+              {{ "Page" | translate }} {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
           </span>
           {% endif %}
           {% if page_obj.has_next %}
-              <button class="layui-btn" > <a href="?show_type=admin&page={{ page_obj.next_page_number }}">{{ "下一页" | translate }}</a></button>
-              <button class="layui-btn" ><a href="?show_type=admin&page={{ page_obj.paginator.num_pages }}">{{ "尾页" | translate }} &raquo;</a></button>
+              <button class="layui-btn" > <a href="?show_type=admin&page={{ page_obj.next_page_number }}">{{ "Next page" | translate }}</a></button>
+              <button class="layui-btn" ><a href="?show_type=admin&page={{ page_obj.paginator.num_pages }}">{{ "Last page" | translate }} &raquo;</a></button>
           {% endif %}
       </span>
   </div>

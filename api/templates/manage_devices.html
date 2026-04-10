@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load my_filters %}
+{% block title %}RustDesk — {% trans "Devices & users" %}{% endblock %}
+{% block legend_name %}{{ "Device assignment" | translate }}{% endblock %}
+{% block link %}
+<style>
+  .device-toolbar { padding: 12px 16px; background: #fff; border-radius: 4px; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .device-toolbar .layui-form-item { margin-bottom: 0; display: inline-block; margin-right: 12px; vertical-align: middle; }
+  .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; padding: 4px 0 24px; }
+  .device-tile {
+    background: #fff; border-radius: 8px; padding: 14px 14px 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    border: 1px solid #e6e6e6; position: relative; transition: box-shadow .15s, border-color .15s;
+  }
+  .device-tile:hover { box-shadow: 0 4px 14px rgba(0,0,0,.1); border-color: #c7c7c7; }
+  .device-tile.online { border-left: 4px solid #16b777; }
+  .device-tile.offline { border-left: 4px solid #bbb; }
+  .device-tile input[type=checkbox] { position: absolute; top: 12px; right: 12px; transform: scale(1.15); }
+  .tile-title { font-weight: 600; font-size: 15px; margin: 0 28px 6px 0; color: #333; word-break: break-all; }
+  .tile-rid { font-size: 12px; color: #888; font-family: ui-monospace, monospace; margin-bottom: 8px; }
+  .tile-meta { font-size: 12px; color: #555; line-height: 1.5; }
+  .tile-meta span { display: block; }
+  .hint { font-size: 12px; color: #888; margin-top: 8px; }
+</style>
+{% endblock %}
+{% block content %}
+<div style="padding: 16px 20px; background-color: #F2F2F2; min-height: 60vh;">
+  <p class="hint">{% trans "Select devices, then choose a target user; optionally pick an existing group or enter a new group name. Exclusive assign removes all peer rows for those devices (including shared copies)." %}</p>
+
+  <form class="layui-form device-toolbar" onsubmit="return false;">
+    <div class="layui-form-item">
+      <label class="layui-form-label" style="width:90px;">{% trans "Target user" %}</label>
+      <div class="layui-input-inline" style="width:180px;">
+        <select id="target-user" lay-filter="target-user">
+          <option value="">{% trans "Please select" %}</option>
+          {% for usr in users %}
+          <option value="{{ usr.id }}">{{ usr.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <label class="layui-form-label" style="width:90px;">{% trans "Existing group" %}</label>
+      <div class="layui-input-inline" style="width:200px;">
+        <select id="target-group" lay-filter="target-group">
+          <option value="">{% trans "None" %}</option>
+        </select>
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <label class="layui-form-label" style="width:100px;">{% trans "New group name" %}</label>
+      <div class="layui-input-inline" style="width:200px;">
+        <input type="text" id="new-group-name" placeholder='{% trans "Leave empty or enter a name to create and apply" %}' class="layui-input" autocomplete="off">
+      </div>
+    </div>
+    <div class="layui-form-item" style="margin-top:8px;">
+      <button type="button" class="layui-btn layui-btn-normal" id="btn-assign">{% trans "Assign" %}</button>
+      <button type="button" class="layui-btn layui-btn-warm" id="btn-exclusive">{% trans "Exclusive assign" %}</button>
+      <button type="button" class="layui-btn layui-btn-danger" id="btn-unassign">{% trans "Unassign" %}</button>
+    </div>
+  </form>
+
+  <div class="tile-grid" id="tile-grid">
+    {% for d in devices %}
+    <label class="device-tile {% if d.is_online %}online{% else %}offline{% endif %}">
+      <input type="checkbox" class="rid-cb" value="{{ d.rid|escape }}">
+      <div class="tile-title">{{ d.hostname|default:d.rid }}</div>
+      <div class="tile-rid">{{ d.rid }}</div>
+      <div class="tile-meta">
+        <span><strong>{% trans "User" %}:</strong> {{ d.rust_user }}</span>
+        <span><strong>{% trans "Group" %}:</strong> {{ d.group_name|default:"—" }}</span>
+        <span><strong>{% trans "OS" %}:</strong> {{ d.os|default:"—" }}</span>
+        <span><strong>{% trans "Status" %}:</strong> {{ d.status }}</span>
+        <span><strong>{% trans "Updated" %}:</strong> {{ d.update_time }}</span>
+      </div>
+    </label>
+    {% empty %}
+    <p>{% trans "No devices. Ensure clients use the API URL and are online." %}</p>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+(function () {
+  var groups = {{ groups_json|safe }};
+  function refillGroups(userId) {
+    var sel = document.getElementById('target-group');
+    while (sel.options.length > 1) sel.remove(1);
+    groups.filter(function (g) { return String(g.user_id) === String(userId); }).forEach(function (g) {
+      var o = document.createElement('option');
+      o.value = g.id;
+      o.textContent = g.name;
+      sel.appendChild(o);
+    });
+  }
+  layui.use(['form', 'layer'], function () {
+    var form = layui.form;
+    var layer = layui.layer;
+    form.render('select');
+    form.on('select(target-user)', function (data) {
+      refillGroups(data.value);
+      form.render('select');
+    });
+    document.getElementById('target-user').addEventListener('change', function () {
+      refillGroups(this.value);
+      try { form.render('select'); } catch (e) {}
+    });
+
+    function selectedRids() {
+      return [].slice.call(document.querySelectorAll('.rid-cb:checked')).map(function (x) { return x.value; });
+    }
+    function postAssign(action) {
+      var uid = document.getElementById('target-user').value;
+      var rids = selectedRids();
+      var gid = document.getElementById('target-group').value;
+      var newName = document.getElementById('new-group-name').value.trim();
+      if (!rids.length) { layer.msg('{% trans "Please select at least one device" %}'); return; }
+      if (!uid) { layer.msg('{% trans "Please select a target user" %}'); return; }
+      var body = {
+        action: action,
+        rids: rids,
+        user_id: parseInt(uid, 10),
+        group_id: gid ? parseInt(gid, 10) : null,
+        new_group_name: newName
+      };
+      fetch('/api/assign_peers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        layer.msg(j.msg || (j.code === 1 ? 'OK' : 'Error'));
+        if (j.code === 1) window.location.reload();
+      }).catch(function () { layer.msg('Network error'); });
+    }
+    document.getElementById('btn-assign').onclick = function () { postAssign('assign'); };
+    document.getElementById('btn-exclusive').onclick = function () { postAssign('exclusive_assign'); };
+    document.getElementById('btn-unassign').onclick = function () { postAssign('unassign'); };
+  });
+})();
+</script>
+{% endblock %}

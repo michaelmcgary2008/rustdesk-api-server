@@ -6,19 +6,19 @@
   <div class="layui-row layui-col-space15">
     <div class="layui-col-md15">
       <div class="layui-card">
-        <div class="layui-card-header">{{ "连接日志" | translate }}:【{{u.username}}】</div>
+        <div class="layui-card-header">{{ "Connection log" | translate }}: 【{{u.username}}】</div>
         <div class="layui-card-body">
           <table class="layui-table">
             <thead>
               <tr>
-                <th>{{ "用户IP" | translate }}</th>
-                <th>{{ "用户ID" | translate }}</th>
-                <th>{{ "用户别名" | translate }}</th>
-                <th>{{ "远程ID" | translate }}</th>
-                <th>{{ "远程别名" | translate }}</th>
-                <th>{{ "连接开始时间" | translate }}</th>
-                <th>{{ "连接结束时间" | translate }}</th>
-                <th>{{ "时长"  | translate }}(HH:MM:SS)</th>
+                <th>{{ "User IP" | translate }}</th>
+                <th>{{ "User ID" | translate }}</th>
+                <th>{{ "User alias" | translate }}</th>
+                <th>{{ "Remote ID" | translate }}</th>
+                <th>{{ "Remote alias" | translate }}</th>
+                <th>{{ "Connection start" | translate }}</th>
+                <th>{{ "Connection end" | translate }}</th>
+                <th>{{ "Duration"  | translate }} (HH:MM:SS)</th>
               </tr>
             </thead>
             <tbody>
@@ -27,8 +27,8 @@
                 <td>{{one.from_ip}} </td>
                 <td>{{one.from_id}}</td>
                 <td>{{one.from_alias}}</td>
-                <td>{{one.rid}}</td>  
-                <td>{{one.alias}}</td> 
+                <td>{{one.rid}}</td>
+                <td>{{one.alias}}</td>
                 <td>{{one.conn_start}}</td>
                 <td>{{one.conn_end}}</td>
                 <td>{{one.duration}}</td>
@@ -47,7 +47,7 @@
           {% endif %}
           {% if page_obj.paginator.num_pages > 1 %}
           <span class="current">
-              {{ "页码 #" | translate }} {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+              {{ "Page #" | translate }} {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
           </span>
           {% endif %}
           {% if page_obj.has_next %}
@@ -55,7 +55,7 @@
               <button class="layui-btn" ><a href="?page={{ page_obj.paginator.num_pages }}">{{ "Last" | translate }} &raquo;</a></button>
           {% endif %}
       </span>
-  </div>  
+  </div>
   </div>
 </div>
 

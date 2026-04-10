@@ -1,5 +1,5 @@
 name: Bug Report
-description: Submit an error report. Failure to respond within 3 days after receiving a response will result in closure. Attention! Asking questions without starting is very unethical.(提交错误报告。在收到回复后3天内未做出回复将导致关闭。注意！不star却提问是很没有道德的。)
+description: Submit an error report. Issues may be closed if there is no reply within 3 days after maintainer response. Please star the repo before opening an issue.
 title: "[Bug]: "
 labels: ["bug"]
 
