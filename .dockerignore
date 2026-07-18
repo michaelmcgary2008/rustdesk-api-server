@@ -1,6 +1,10 @@
 .git
 **/.DS_Store
 *.tar
+# Never bake a generated secret into the image (db/db.sqlite3 stays: it's the first-run seed)
+db/secret_key.txt
+db/test_db.sqlite3
+*.local.yaml
 __pycache__
 *.pyc
 .pytest_cache
