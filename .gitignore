@@ -41,3 +41,4 @@ db/secret_key.txt
 job2en.py
 
 新建文本文档.txt
+.claude/settings.local.json
