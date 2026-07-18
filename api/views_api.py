@@ -8,6 +8,7 @@ import math
 from django.contrib import auth
 # from django.forms.models import model_to_dict
 from api.models import RustDeskToken, UserProfile, RustDeskTag, RustDeskPeer, RustDesDevice, ConnLog, FileLog
+from django.db import transaction
 from django.db.models import Q
 import copy
 from .views_front import *
@@ -21,6 +22,17 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
+
+
+def fit_field(value, max_length):
+    """Coerce a client-supplied value to a string that fits a CharField.
+
+    PostgreSQL raises on varchar overflow (SQLite silently accepted it), so
+    every client-supplied value must be clamped before writing.
+    """
+    if value is None:
+        return ''
+    return str(value)[:max_length]
 
 
 def parse_json_body(request):
@@ -62,8 +74,10 @@ def login(request):
     user.rtype = rtype
     user.deviceInfo = json.dumps(deviceInfo)
     user.save()
-    # Bind device (20240819)
-    peer = RustDeskPeer.objects.filter(Q(rid=rid)).first()
+    # Bind device (20240819). Scope the lookup to this user — matching on rid
+    # alone found other users' peers and skipped the bind (or piggybacked on
+    # someone else's entry).
+    peer = RustDeskPeer.objects.filter(Q(uid=user.id) & Q(rid=rid)).first()
     if not peer:
         device = RustDesDevice.objects.filter(Q(uuid=uuid)).first()
         if device:
@@ -71,8 +85,8 @@ def login(request):
             peer.uid = user.id
             peer.rid = device.rid
             # peer.abid = ab.guid    # v2,  current version not used
-            peer.hostname = device.hostname
-            peer.username = device.username
+            peer.hostname = fit_field(device.hostname, 30)
+            peer.username = fit_field(device.username, 20)
             peer.save()
 
     token = RustDeskToken.objects.filter(Q(uid=user.id) & Q(username=user.username) & Q(rid=user.rid)).first()
@@ -167,20 +181,20 @@ def ab(request):
             tag_names = [str(x.tag_name) for x in tags]
             tag_colors = {str(x.tag_name): int(x.tag_color) for x in tags if x.tag_color != ''}
 
-        peers_result = []
-        peers = RustDeskPeer.objects.filter(Q(uid=uid))
-        if peers:
-            for peer in peers:
-                tmp = {
-                    'id': peer.rid,
-                    'username': peer.username,
-                    'hostname': peer.hostname,
-                    'alias': peer.alias,
-                    'platform': peer.platform,
-                    'tags': peer.tags.split(','),
-                    'hash': peer.rhash,
-                }
-                peers_result.append(tmp)
+        # Dedupe by rid (newest row wins) so historical duplicates never
+        # reach the client twice.
+        peers_by_rid = {}
+        for peer in RustDeskPeer.objects.filter(Q(uid=uid)).order_by('id'):
+            peers_by_rid[peer.rid] = {
+                'id': peer.rid,
+                'username': peer.username,
+                'hostname': peer.hostname,
+                'alias': peer.alias,
+                'platform': peer.platform,
+                'tags': [t for t in peer.tags.split(',') if t],
+                'hash': peer.rhash,
+            }
+        peers_result = list(peers_by_rid.values())
 
         result['updated_at'] = datetime.datetime.now()
         result['data'] = {
@@ -201,44 +215,48 @@ def ab(request):
             return JsonResponse({'error': _('Invalid JSON body.')}, status=400)
         tagnames = data.get('tags', [])
         tag_colors = data.get('tag_colors', '')
-        tag_colors = {} if tag_colors == '' else json.loads(tag_colors)
+        try:
+            tag_colors = {} if tag_colors == '' else json.loads(tag_colors)
+        except (TypeError, ValueError):
+            tag_colors = {}
         peers = data.get('peers', [])
 
-        if tagnames:
-            RustDeskTag.objects.filter(uid=token.uid).delete()
-            newlist = []
-            for name in tagnames:
-                tag = RustDeskTag(
-                    uid=token.uid,
-                    tag_name=name,
-                    tag_color=tag_colors.get(name, '')
-                )
-                newlist.append(tag)
-            RustDeskTag.objects.bulk_create(newlist)
-        if peers:
-            RustDeskPeer.objects.filter(uid=token.uid).delete()
-            newlist = []
-            for one in peers:
-                peer = RustDeskPeer(
-                    uid=token.uid,
-                    rid=one['id'],
-                    username=one['username'],
-                    hostname=one['hostname'],
-                    alias=one['alias'],
-                    platform=one['platform'],
-                    tags=','.join(one['tags']),
-                    rhash=one['hash'],
+        # Atomic delete+recreate: without the transaction, two devices syncing
+        # concurrently interleaved and duplicated every peer; a failed insert
+        # also used to wipe the address book (delete committed, insert not).
+        with transaction.atomic():
+            if tagnames:
+                RustDeskTag.objects.filter(uid=token.uid).delete()
+                RustDeskTag.objects.bulk_create([
+                    RustDeskTag(
+                        uid=token.uid,
+                        tag_name=fit_field(name, 60),
+                        tag_color=fit_field(tag_colors.get(name, ''), 60),
+                    )
+                    for name in tagnames
+                ])
+            if peers:
+                RustDeskPeer.objects.filter(uid=token.uid).delete()
+                by_rid = {}
+                for one in peers:
+                    rid = fit_field(one.get('id'), 60).strip()
+                    if not rid:
+                        continue
+                    by_rid[rid] = RustDeskPeer(
+                        uid=token.uid,
+                        rid=rid,
+                        username=fit_field(one.get('username'), 20),
+                        hostname=fit_field(one.get('hostname'), 30),
+                        alias=fit_field(one.get('alias'), 30),
+                        platform=fit_field(one.get('platform'), 30),
+                        tags=fit_field(','.join(map(str, one.get('tags') or [])), 30),
+                        rhash=fit_field(one.get('hash'), 60),
+                    )
+                RustDeskPeer.objects.bulk_create(by_rid.values())
 
-
-                )
-                newlist.append(peer)
-            RustDeskPeer.objects.bulk_create(newlist)
-
-    result = {
-        'code': 102,
-        'data': _('Address book update error')
-    }
-    return JsonResponse(result)
+    # The client only checks for an 'error' key; the old unconditional
+    # {'code': 102, 'data': 'update error'} reply was returned even on success.
+    return JsonResponse({})
 
 
 def ab_get(request):
@@ -259,25 +277,27 @@ def sysinfo(request):
         return err
     if 'id' not in postdata or 'uuid' not in postdata:
         return JsonResponse({'error': _('Invalid request.')}, status=400)
+    # Whitelist known fields: newer clients send extra keys, and splatting the
+    # raw payload into .update(**postdata) crashed on any unknown field.
+    fields = {
+        'cpu': fit_field(postdata.get('cpu'), 100),
+        'hostname': fit_field(postdata.get('hostname'), 100),
+        'memory': fit_field(postdata.get('memory'), 100),
+        'os': fit_field(postdata.get('os'), 100),
+        'username': fit_field(postdata.get('username', '-'), 100),
+        'version': fit_field(postdata.get('version'), 100),
+        'ip_address': fit_field(client_ip, 60),
+    }
     device = RustDesDevice.objects.filter(Q(rid=postdata['id']) & Q(uuid=postdata['uuid'])).first()
     if not device:
         device = RustDesDevice(
-            rid=postdata['id'],
-            cpu=postdata['cpu'],
-            hostname=postdata['hostname'],
-            memory=postdata['memory'],
-            os=postdata['os'],
-            username=postdata.get('username', '-'),
-            uuid=postdata['uuid'],
-            version=postdata['version'],
-            ip_address=client_ip
+            rid=fit_field(postdata['id'], 60),
+            uuid=fit_field(postdata['uuid'], 100),
+            **fields,
         )
         device.save()
     else:
-        postdata2 = copy.copy(postdata)
-        postdata2['rid'] = postdata2['id']
-        postdata2.pop('id')
-        RustDesDevice.objects.filter(Q(rid=postdata['id']) & Q(uuid=postdata['uuid'])).update(**postdata2)
+        RustDesDevice.objects.filter(Q(rid=postdata['id']) & Q(uuid=postdata['uuid'])).update(**fields)
     result['data'] = 'ok'
     return JsonResponse(result)
 
@@ -294,20 +314,26 @@ def heartbeat(request):
         device = RustDesDevice.objects.filter(Q(rid=rid) & Q(uuid=uuid)).first()
         if not device:
             device = RustDesDevice(
-                rid=rid,
-                uuid=uuid,
+                rid=fit_field(rid, 60),
+                uuid=fit_field(uuid, 100),
                 cpu='',
                 hostname='Pending',
                 memory='',
                 os='',
                 username='',
                 version='',
-                ip_address=client_ip,
+                ip_address=fit_field(client_ip, 60),
             )
             device.save()
         else:
-            device.ip_address = client_ip
-            device.save()
+            # Throttle last-seen writes: clients heartbeat every ~10s and the
+            # web UI only marks devices offline after 120s, so one write per
+            # minute is enough. Unthrottled, a NAS disk stall backed WAL
+            # writes up until all DB connections were exhausted.
+            age = (datetime.datetime.now() - device.update_time).total_seconds()
+            if age >= 60 or device.ip_address != client_ip:
+                device.ip_address = fit_field(client_ip, 60)
+                device.save(update_fields=['ip_address', 'update_time'])
     # Refresh token: stamp with *now* so login's age check works. (Stamping a
     # future time made `now - create_time` negative and tokens never expired.)
     if rid and uuid:
