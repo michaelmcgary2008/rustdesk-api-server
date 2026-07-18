@@ -23,13 +23,27 @@ def get_client_ip(request):
     return ip
 
 
+def parse_json_body(request):
+    """Parse the request body as JSON.
+
+    Returns (data, None) on success or (None, JsonResponse) on a malformed
+    body, so client-facing endpoints return a clean 400 instead of a 500.
+    """
+    try:
+        return json.loads(request.body.decode()), None
+    except (ValueError, UnicodeDecodeError):
+        return None, JsonResponse({'error': _('Invalid JSON body.')}, status=400)
+
+
 def login(request):
     result = {}
     if request.method == 'GET':
         result['error'] = _('Wrong method. Use POST.')
         return JsonResponse(result)
 
-    data = json.loads(request.body.decode())
+    data, err = parse_json_body(request)
+    if err:
+        return err
 
     username = data.get('username', '')
     password = data.get('password', '')
@@ -63,11 +77,10 @@ def login(request):
 
     token = RustDeskToken.objects.filter(Q(uid=user.id) & Q(username=user.username) & Q(rid=user.rid)).first()
 
-    # Check token expiry
+    # Check token expiry (total_seconds, not .seconds — the latter drops whole days)
     if token:
-        now_t = datetime.datetime.now()
-        nums = (now_t - token.create_time).seconds if now_t > token.create_time else 0
-        if nums >= EFFECTIVE_SECONDS:
+        age = (datetime.datetime.now() - token.create_time).total_seconds()
+        if age >= EFFECTIVE_SECONDS:
             token.delete()
             token = None
 
@@ -93,7 +106,9 @@ def logout(request):
         result = {'error': _('Wrong method.')}
         return JsonResponse(result)
 
-    data = json.loads(request.body.decode())
+    data, err = parse_json_body(request)
+    if err:
+        return err
     rid = data.get('id', '')
     uuid = data.get('uuid', '')
     user = UserProfile.objects.filter(Q(rid=rid) & Q(uuid=uuid)).first()
@@ -176,9 +191,14 @@ def ab(request):
         result['data'] = json.dumps(result['data'])
         return JsonResponse(result)
     else:
-        postdata = json.loads(request.body.decode())
+        postdata, err = parse_json_body(request)
+        if err:
+            return err
         data = postdata.get('data', '')
-        data = {} if data == '' else json.loads(data)
+        try:
+            data = {} if data == '' else json.loads(data)
+        except (TypeError, ValueError):
+            return JsonResponse({'error': _('Invalid JSON body.')}, status=400)
         tagnames = data.get('tags', [])
         tag_colors = data.get('tag_colors', '')
         tag_colors = {} if tag_colors == '' else json.loads(tag_colors)
@@ -234,7 +254,11 @@ def sysinfo(request):
         result['error'] = _('Wrong submission method.')
         return JsonResponse(result)
     client_ip = get_client_ip(request)
-    postdata = json.loads(request.body)
+    postdata, err = parse_json_body(request)
+    if err:
+        return err
+    if 'id' not in postdata or 'uuid' not in postdata:
+        return JsonResponse({'error': _('Invalid request.')}, status=400)
     device = RustDesDevice.objects.filter(Q(rid=postdata['id']) & Q(uuid=postdata['uuid'])).first()
     if not device:
         device = RustDesDevice(
@@ -259,7 +283,9 @@ def sysinfo(request):
 
 
 def heartbeat(request):
-    postdata = json.loads(request.body)
+    postdata, err = parse_json_body(request)
+    if err:
+        return err
     rid = postdata.get('id', '')
     uuid = postdata.get('uuid', '')
     client_ip = get_client_ip(request)
@@ -282,18 +308,19 @@ def heartbeat(request):
         else:
             device.ip_address = client_ip
             device.save()
-    # Refresh token
-    create_time = datetime.datetime.now() + datetime.timedelta(seconds=EFFECTIVE_SECONDS)
+    # Refresh token: stamp with *now* so login's age check works. (Stamping a
+    # future time made `now - create_time` negative and tokens never expired.)
     if rid and uuid:
-        RustDeskToken.objects.filter(Q(rid=rid) & Q(uuid=uuid)).update(create_time=create_time)
+        RustDeskToken.objects.filter(Q(rid=rid) & Q(uuid=uuid)).update(create_time=datetime.datetime.now())
     result = {}
     result['data'] = _('Online')
     return JsonResponse(result)
 
 
 def audit(request):
-    postdata = json.loads(request.body)
-    # print(postdata)
+    postdata, err = parse_json_body(request)
+    if err:
+        return err
     audit_type = postdata['action'] if 'action' in postdata else ''
     if audit_type == 'new':
         new_conn_log = ConnLog(

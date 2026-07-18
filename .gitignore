@@ -23,9 +23,21 @@ dist
 dist-
 dist_py38
 
+# Docker image exports / build artifacts
+*.tar
+rustdesk-api-server-local2/
+
+# Local deployment configs (may contain secrets)
+docker-compose.*.local.yaml
+*.local.yaml
+
+# macOS
+.DS_Store
+
 LICENSE.rst
 
 db/test_db.sqlite3
+db/secret_key.txt
 job2en.py
 
 新建文本文档.txt

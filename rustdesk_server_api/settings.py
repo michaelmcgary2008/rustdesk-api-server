@@ -23,11 +23,28 @@ else:
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("SECRET_KEY", 'j%7yjvygpih=6b%qf!q%&ixpn+27dngzdu-i3xh-^3xgy3^nnc')
+# Prefer SECRET_KEY from the environment; otherwise generate one once and
+# persist it under db/ (a mounted volume in Docker) so sessions survive restarts.
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    _key_file = BASE_DIR / 'db' / 'secret_key.txt'
+    try:
+        SECRET_KEY = _key_file.read_text().strip()
+    except OSError:
+        SECRET_KEY = ''
+    if not SECRET_KEY:
+        from django.core.management.utils import get_random_secret_key
+        SECRET_KEY = get_random_secret_key()
+        try:
+            _key_file.parent.mkdir(parents=True, exist_ok=True)
+            _key_file.write_text(SECRET_KEY)
+        except OSError:
+            pass  # read-only filesystem: key regenerates each start (sessions reset)
 # ID server host (often same as relay); used by the web client
 ID_SERVER = os.environ.get("ID_SERVER", '')
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", False)
+# Note: env vars are strings — "False" is truthy, so parse explicitly.
+DEBUG = str(os.environ.get("DEBUG", "False")).lower() in ('true', '1', 'yes')
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 ALLOWED_HOSTS = ["*"]
 AUTH_USER_MODEL = 'api.UserProfile'
@@ -36,13 +53,18 @@ ALLOW_REGISTRATION = os.environ.get("ALLOW_REGISTRATION", "True")
 ALLOW_REGISTRATION = True if ALLOW_REGISTRATION.lower() == 'true' else False
 
 
-# ========== Database (MySQL optional) ==========
+# ========== Database (SQLite default; MySQL / PostgreSQL optional) ==========
 DATABASE_TYPE = os.environ.get("DATABASE_TYPE", 'SQLITE')
 MYSQL_DBNAME = os.environ.get("MYSQL_DBNAME", '-')
 MYSQL_HOST = os.environ.get("MYSQL_HOST", '127.0.0.1')
 MYSQL_USER = os.environ.get("MYSQL_USER", '-')
 MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", '-')
 MYSQL_PORT = os.environ.get("MYSQL_PORT", '3306')
+POSTGRES_DBNAME = os.environ.get("POSTGRES_DBNAME", '-')
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", '127.0.0.1')
+POSTGRES_USER = os.environ.get("POSTGRES_USER", '-')
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", '-')
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT", '5432')
 # ========== End database ==========
 
 LANGUAGE_CODE = os.environ.get("LANGUAGE_CODE", 'en')
@@ -101,6 +123,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db/db.sqlite3',
+        # Longer busy timeout helps concurrent RustDesk clients (sysinfo/heartbeat) on SQLite.
+        'OPTIONS': {
+            'timeout': int(os.environ.get('SQLITE_BUSY_TIMEOUT', '30')),
+        },
     }
 }
 if DATABASE_TYPE == 'MYSQL' and MYSQL_DBNAME != '-' and MYSQL_USER != '-' and MYSQL_PASSWORD != '-':
@@ -113,6 +139,17 @@ if DATABASE_TYPE == 'MYSQL' and MYSQL_DBNAME != '-' and MYSQL_USER != '-' and MY
             'PASSWORD': MYSQL_PASSWORD,
             'PORT': MYSQL_PORT,
             'OPTIONS': {'charset': 'utf8'},
+        }
+    }
+elif DATABASE_TYPE == 'POSTGRESQL' and POSTGRES_DBNAME != '-' and POSTGRES_USER != '-' and POSTGRES_PASSWORD != '-':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': POSTGRES_DBNAME,
+            'HOST': POSTGRES_HOST,
+            'USER': POSTGRES_USER,
+            'PASSWORD': POSTGRES_PASSWORD,
+            'PORT': POSTGRES_PORT,
         }
     }
 

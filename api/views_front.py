@@ -314,7 +314,8 @@ def check_sharelink_expired(sharelink):
     now = datetime.datetime.now()
     if sharelink.create_time > now:
         return False
-    if (now - sharelink.create_time).seconds < 15 * 60:
+    # total_seconds, not .seconds — the latter drops whole days
+    if (now - sharelink.create_time).total_seconds() < 15 * 60:
         return False
     else:
         sharelink.is_expired = True

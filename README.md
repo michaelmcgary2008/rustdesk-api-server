@@ -105,6 +105,15 @@ cd rustdesk-api-server
 docker build -t rustdesk-api-server:local .
 ```
 
+**AMD64 / x86_64 NAS** (e.g. Synology with **AMD Ryzen Embedded V1500B**, Intel Atom, etc.): build for `linux/amd64` so the image matches the CPU (especially if you build on Apple Silicon):
+
+```bash
+DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t rustdesk-api-server:amd64 .
+docker save rustdesk-api-server:amd64 -o rustdesk-api-server-amd64.tar
+```
+
+Import `rustdesk-api-server-amd64.tar` on the NAS (Container Manager → Image → Add from file), then use `image: rustdesk-api-server:amd64` in compose.
+
 **Save and copy to the NAS** (optional; avoids building on the NAS):
 
 ```bash
@@ -128,14 +137,19 @@ Open `http://<NAS-IP>:21114`. If you use Synology **reverse proxy with HTTPS**, 
 | `ID_SERVER` | Optional | ID / relay host for the web client |
 | `DEBUG` | Optional, default `False` | Debug mode |
 | `ALLOW_REGISTRATION` | Optional, default `True` | Allow new registrations |
-| Database | | If not using MySQL, skip MySQL vars |
-| `DATABASE_TYPE` | `SQLITE` or `MYSQL` | |
+| Database | | SQLite is the default; skip MySQL/Postgres vars if unused |
+| `DATABASE_TYPE` | `SQLITE`, `MYSQL`, or `POSTGRESQL` | |
 | `MYSQL_*` | | See `rustdesk_server_api/settings.py` |
+| `POSTGRES_DBNAME` / `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_PORT` | | Required when `DATABASE_TYPE=POSTGRESQL`; see `docker-compose.postgres.yaml` |
+| `SQLITE_BUSY_TIMEOUT` | Optional, default `30` | Seconds SQLite waits on lock (many clients hitting `/api/heartbeat`) |
 
-See [tutorial/sqlite2mysql.md](tutorial/sqlite2mysql.md) for SQLite → MySQL migration.
+See [tutorial/sqlite2mysql.md](tutorial/sqlite2mysql.md) for SQLite → MySQL migration. For PostgreSQL, use [docker-compose.postgres.yaml](docker-compose.postgres.yaml) (bundled `postgres:15-alpine` sidecar); migrate existing SQLite data with `manage.py dumpdata` → `loaddata`.
 
 ## Usage notes
 
+- **RustDesk “API server” URL:** use the **origin only** (scheme + host + port), e.g. `https://ab.example.org` or `https://ab.example.org:443`. The open-source client builds URLs as **`{api-server}/api/heartbeat`** (and similarly for other routes)—see `heartbeat_url()` in [rustdesk/src/hbbs_http/sync.rs](https://github.com/rustdesk/rustdesk/blob/master/src/hbbs_http/sync.rs). So the request path becomes **`/api/api/...` only if** the stored **`api-server` value already ends with `/api`** (trailing slash is trimmed, but a path suffix is not). That can be easy to miss if settings came from an old **Import server config**, **custom client**, or **MDM** while the UI you checked looks empty or different.
+- **Reverse proxy:** your upstream URL can be “plain” `http://127.0.0.1:21114` with no `/api` in the field and you can still get a bad path if something in front **rewrites** or **prefixes** the path (portal subpath, chained proxies, odd `proxy_pass` + `rewrite` combos). A **404** on `/api/api/heartbeat` means the path was doubled. Fix it at the source (the client's `api-server` value or the proxy rewrite) rather than in the server.
+- **SQLite on a busy NAS:** prefer **MySQL** for many simultaneous clients; otherwise raise `SQLITE_BUSY_TIMEOUT` and avoid running extra DB tools against `db.sqlite3` while the container is up.
 - First registered user becomes super-admin when the database is empty.
 - Clients typically send device info when installed as a service (non-portable install).
 - Web control: set `ID_SERVER` or `settings.ID_SERVER`. Non-SSL web UI: use `http://` for WebSocket (not `https://`) unless you terminate TLS correctly.

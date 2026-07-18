@@ -1,0 +1,62 @@
+# RustDesk API server + PostgreSQL sidecar (Docker Compose)
+# Mirrors a production Synology deployment; works on any Docker host.
+#
+# 1. Set POSTGRES_PASSWORD (and SUPERUSER_* / URL) via an .env file or environment.
+# 2. Build the image (see README "Build image") or point `image:` at your tag.
+# 3. docker compose -f docker-compose.postgres.yaml up -d
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: rustdesk-api-postgres
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      POSTGRES_DB: ${POSTGRES_DBNAME:-rustdesk_api}
+      POSTGRES_USER: ${POSTGRES_USER:-rustdesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rustdesk} -d ${POSTGRES_DBNAME:-rustdesk_api}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rustdesk-api:
+    container_name: rustdesk-api
+    image: rustdesk-api-server:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "21114:21114"
+    environment:
+      HOST: 0.0.0.0
+      TZ: ${TZ:-UTC}
+      DEBUG: "False"
+      # Browser URL (scheme + host + port). Required behind an HTTPS reverse proxy.
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://127.0.0.1:21114}
+      DATABASE_TYPE: "POSTGRESQL"
+      POSTGRES_DBNAME: ${POSTGRES_DBNAME:-rustdesk_api}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-rustdesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PORT: "5432"
+    volumes:
+      # Kept for the bundled web client static assets / legacy layout; DB lives in Postgres.
+      - ./db:/rustdesk-api-server/db
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
