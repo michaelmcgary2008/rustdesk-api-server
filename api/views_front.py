@@ -521,7 +521,8 @@ def assign_peers(request):
 
     mg = None
     if new_group_name:
-        mg, _ = MachineGroup.objects.get_or_create(user=target, name=new_group_name)
+        # NB: don't unpack into `_` — that shadows the gettext alias used below.
+        mg, _created = MachineGroup.objects.get_or_create(user=target, name=new_group_name)
     elif group_id:
         mg = MachineGroup.objects.filter(id=group_id, user_id=target.id).first()
         if not mg:
