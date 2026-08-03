@@ -46,7 +46,12 @@ ID_SERVER = os.environ.get("ID_SERVER", '')
 # Note: env vars are strings — "False" is truthy, so parse explicitly.
 DEBUG = str(os.environ.get("DEBUG", "False")).lower() in ('true', '1', 'yes')
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
-ALLOWED_HOSTS = ["*"]
+# Comma-separated env override, e.g. ALLOWED_HOSTS=ab.example.org,192.168.1.10
+# Defaults to "*" for backward compatibility. Loopback is always included so
+# the container healthcheck works regardless of the configured list.
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+if "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS += ["127.0.0.1", "localhost"]
 AUTH_USER_MODEL = 'api.UserProfile'
 
 ALLOW_REGISTRATION = os.environ.get("ALLOW_REGISTRATION", "True")

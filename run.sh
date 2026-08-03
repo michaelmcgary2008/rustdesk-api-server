@@ -37,4 +37,18 @@ fi
 
 # Do not run makemigrations in production containers (locks DB, breaks under load).
 python manage.py migrate --noinput
-python manage.py runserver $HOST:21114;
+
+if [ "${USE_DEV_SERVER}" = "True" ]; then
+    exec python manage.py runserver $HOST:21114
+fi
+
+# Gunicorn bounds concurrency: runserver spawned an unbounded thread per
+# request, so any DB stall piled up threads until all Postgres connections
+# were exhausted. workers*threads caps in-flight requests (and DB connections).
+exec gunicorn rustdesk_server_api.wsgi:application \
+    --bind "${HOST}:21114" \
+    --workers "${GUNICORN_WORKERS:-3}" \
+    --threads "${GUNICORN_THREADS:-8}" \
+    --timeout "${GUNICORN_TIMEOUT:-90}" \
+    --access-logfile - \
+    --error-logfile -
