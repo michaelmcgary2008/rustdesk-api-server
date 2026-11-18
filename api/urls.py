@@ -5,8 +5,14 @@ else:
     from django.conf.urls import  url, include
 
 from api import views
- 
+from api import views_oidc
+
 urlpatterns = [
+    url(r'^login-options$', views_oidc.login_options),
+    url(r'^oidc/auth$', views_oidc.oidc_auth),
+    url(r'^oidc/auth-query$', views_oidc.oidc_auth_query),
+    url(r'^oidc/callback$', views_oidc.callback),
+    url(r'^oidc/web-login$', views_oidc.web_login),
     url(r'^login',views.login),
     url(r'^logout',views.logout),
     url(r'^ab$',views.ab),

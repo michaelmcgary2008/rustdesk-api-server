@@ -116,7 +116,8 @@ def user_action(request):
 
 def user_login(request):
     if request.method == 'GET':
-        return render(request, 'login.html')
+        from api.views_oidc import enabled as google_enabled
+        return render(request, 'login.html', {'google_enabled': google_enabled()})
 
     username = request.POST.get('account', '')
     password = request.POST.get('password', '')
@@ -572,6 +573,8 @@ def device_inventory(request):
 
 @login_required(login_url='/api/user_action?action=login')
 def conn_log(request):
+    if not request.user.is_admin:
+        return HttpResponseRedirect('/api/work')
     paginator = Paginator(get_conn_log(), 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
@@ -580,6 +583,8 @@ def conn_log(request):
 
 @login_required(login_url='/api/user_action?action=login')
 def file_log(request):
+    if not request.user.is_admin:
+        return HttpResponseRedirect('/api/work')
     paginator = Paginator(get_file_log(), 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)

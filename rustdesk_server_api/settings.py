@@ -48,6 +48,15 @@ ID_SERVER = os.environ.get("ID_SERVER", '')
 RUSTDESK_CONFIG = os.environ.get("RUSTDESK_CONFIG", '').strip()
 # Folder holding the official client installers served by /downloads.
 DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", '/downloads')
+# "Sign in with Google" (RustDesk client + web login). Disabled unless the
+# client id and secret are set. GOOGLE_REDIRECT_URI must exactly match the
+# "Authorized redirect URI" registered in Google Cloud.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", '').strip()
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", '').strip()
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", '').strip()
+# Comma-separated Workspace domains allowed to sign in; first sign-in creates
+# a regular (non-admin) account named after the email address.
+GOOGLE_ALLOWED_DOMAINS = [d.strip().lower() for d in os.environ.get("GOOGLE_ALLOWED_DOMAINS", '').split(',') if d.strip()]
 # SECURITY WARNING: don't run with debug turned on in production!
 # Note: env vars are strings — "False" is truthy, so parse explicitly.
 DEBUG = str(os.environ.get("DEBUG", "False")).lower() in ('true', '1', 'yes')
