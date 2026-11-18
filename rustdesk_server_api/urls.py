@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path
 
 from api.views import index
+from api.views_downloads import downloads, download_file
 if django.__version__.split('.')[0]>='4':
     from django.urls import re_path as url
     from django.conf.urls import  include
@@ -31,6 +32,8 @@ urlpatterns = [
     path('i18n/', include('django.conf.urls.i18n')),
     path('admin/', admin.site.urls),
     url(r'^$', index),
+    url(r'^downloads/?$', downloads),
+    url(r'^downloads/(?P<platform>windows|mac-arm64|mac-x86_64)$', download_file),
     url(r'^api/', include('api.urls')),
     url(r'^webui/', include('webui.urls')),
     url(r'^static/(?P<path>.*)$', static.serve, {'document_root': settings.STATIC_ROOT}, name='static'),

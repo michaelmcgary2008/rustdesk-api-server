@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Download RustDesk</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1d2330; --muted:#5b6475; --line:#e2e5ea; --accent:#1f6feb; --accent-text:#fff; --code:#f0f2f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --text:#e6e9ee; --muted:#9aa3b2; --line:#2c323b; --accent:#4a8cff; --accent-text:#0b1220; --code:#262b33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 0 0 12px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  ol { margin: 12px 0 0; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+  a.btn, button.btn { display: inline-block; background: var(--accent); color: var(--accent-text); text-decoration: none; border: 0; border-radius: 8px; padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  a.btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .missing { color: var(--muted); font-style: italic; }
+  .code { display: block; width: 100%; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; color: var(--text); margin: 10px 0; user-select: all; }
+  .note { color: var(--muted); font-size: .9rem; }
+  b.ui { font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Download RustDesk</h1>
+  <p class="lead">Remote support for Waters Church computers. These downloads are set up to use our server, <b>{{ host }}</b>.{% if version %} Version {{ version }}.{% endif %}</p>
+
+  <section id="windows">
+    <h2>Windows</h2>
+    {% if 'windows' in available %}
+    <div class="buttons"><a class="btn" href="/downloads/windows">Download for Windows</a></div>
+    <ol>
+      <li>Run the downloaded file. <b>Don't rename it</b>: the file name carries our server settings.</li>
+      <li>Click <b class="ui">Install</b> and accept the prompts.</li>
+      <li>Send your IT contact the 9- or 10-digit <b class="ui">ID</b> shown in RustDesk.</li>
+    </ol>
+    {% else %}
+    <p class="missing">The Windows installer isn't available right now.</p>
+    {% endif %}
+  </section>
+
+  <section id="mac">
+    <h2>Mac</h2>
+    {% if 'mac-arm64' in available or 'mac-x86_64' in available %}
+    <div class="buttons">
+      {% if 'mac-arm64' in available %}<a class="btn" href="/downloads/mac-arm64">Download for Apple silicon (M1 or newer)</a>{% endif %}
+      {% if 'mac-x86_64' in available %}<a class="btn secondary" href="/downloads/mac-x86_64">Download for Intel Mac</a>{% endif %}
+    </div>
+    <p class="note">Not sure which? Apple menu &rarr; About This Mac. "Chip: Apple M…" means Apple silicon; "Processor: Intel" means Intel.</p>
+    <ol>
+      <li>Open the downloaded file and drag <b class="ui">RustDesk</b> into <b class="ui">Applications</b>. Then open RustDesk from Applications.</li>
+      <li>Click <b>Copy server settings</b> below.</li>
+      <li>In RustDesk, open <b class="ui">Settings &rarr; Network</b>, click <b class="ui">Unlock Network Settings</b>, then click <b class="ui">ID/Relay Server</b>. Click the paste icon (<b class="ui">Import server config</b>), then <b class="ui">OK</b>.</li>
+      <li>When RustDesk asks, allow <b class="ui">Accessibility</b> and <b class="ui">Screen Recording</b> in System Settings &rarr; Privacy &amp; Security. Without them, IT can't see or control the screen.</li>
+      <li>Send your IT contact the <b class="ui">ID</b> shown in RustDesk.</li>
+    </ol>
+    {% else %}
+    <p class="missing">The Mac installer isn't available right now.</p>
+    {% endif %}
+  </section>
+
+  <section id="settings">
+    <h2>Server settings</h2>
+    <p>Already have RustDesk installed? Copy this code. Then in RustDesk go to <b class="ui">Settings &rarr; Network &rarr; Unlock Network Settings &rarr; ID/Relay Server</b>, click the paste icon (<b class="ui">Import server config</b>), and click <b class="ui">OK</b>.</p>
+    <code class="code" id="config">{{ config_code }}</code>
+    <button class="btn" id="copy" type="button">Copy server settings</button>
+    <span class="note" id="copied" hidden>Copied.</span>
+  </section>
+</main>
+<script>
+  document.getElementById('copy').addEventListener('click', function () {
+    var text = document.getElementById('config').textContent.trim();
+    var done = function () { document.getElementById('copied').hidden = false; };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      var r = document.createRange(); r.selectNodeContents(document.getElementById('config'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      try { document.execCommand('copy'); done(); } catch (e) {}
+    }
+  });
+</script>
+</body>
+</html>

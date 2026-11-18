@@ -42,6 +42,12 @@ if not SECRET_KEY:
             pass  # read-only filesystem: key regenerates each start (sessions reset)
 # ID server host (often same as relay); used by the web client
 ID_SERVER = os.environ.get("ID_SERVER", '')
+# Public downloads page (/downloads): the RustDesk "server configuration" code
+# (Settings > Network > Export server config). It holds the ID/API host and the
+# server's PUBLIC key only — not a secret. Empty disables the page.
+RUSTDESK_CONFIG = os.environ.get("RUSTDESK_CONFIG", '').strip()
+# Folder holding the official client installers served by /downloads.
+DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", '/downloads')
 # SECURITY WARNING: don't run with debug turned on in production!
 # Note: env vars are strings — "False" is truthy, so parse explicitly.
 DEBUG = str(os.environ.get("DEBUG", "False")).lower() in ('true', '1', 'yes')
